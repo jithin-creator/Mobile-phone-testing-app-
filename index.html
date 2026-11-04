@@ -1,1 +1,303 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bike Car Meter Manager</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+:root{
+--bg:#101010;
+--panel:#202020;
+--gold:#e0b34f;
+--txt:#ffffff;
+}
+body{
+background:var(--bg);
+color:var(--txt);
+font-family:Arial,sans-serif;
+margin:0;padding:15px;
+}
+h2{color:var(--gold)}
+.box{
+background:var(--panel);
+padding:15px;
+margin:12px 0;
+border-radius:12px;
+}
+input,textarea,select{
+width:100%;
+padding:12px;
+margin:6px 0;
+box-sizing:border-box;
+background:#111;
+color:white;
+border:1px solid #555;
+border-radius:7px;
+}
+button{
+background:var(--gold);
+color:black;
+padding:12px;
+border:0;
+border-radius:8px;
+margin:5px 2px;
+font-weight:bold;
+}
+img{max-width:100%;max-height:220px}
+</style>
+</head>
+
+<body>
+
+<h2>BIKE & CAR METER ID</h2>
+
+<div class="box">
+<h3>Customer Details</h3>
+<input id="name" placeholder="Customer Name">
+<input id="phone" placeholder="Phone Number">
+<input id="address" placeholder="Address">
+</div>
+
+<div class="box">
+<h3>Meter Details</h3>
+<input id="vehicle" placeholder="Bike / Car Model">
+<input id="brand" placeholder="Meter Brand">
+<input id="serial" placeholder="Meter Serial Number">
+<textarea id="details" placeholder="Meter Fault Details"></textarea>
+</div>
+
+<div class="box">
+<h3>PCB Details</h3>
+<input id="pcb" placeholder="PCB Number">
+<input id="ic" placeholder="Main IC Number">
+<input id="components" placeholder="Other IC Details">
+<textarea id="notes" placeholder="Pinout / Voltage / Repair Notes"></textarea>
+</div>
+
+<div class="box">
+<h3>Camera Photos</h3>
+<label>Meter Photo</label>
+<input type="file" id="meterphoto" accept="image/*" capture="environment">
+<img id="meterpreview">
+
+<label>PCB Photo</label>
+<input type="file" id="pcbphoto" accept="image/*" capture="environment">
+<img id="pcbpreview">
+</div>
+
+<div class="box">
+<h3>QR Code</h3>
+<div id="qrcode"></div>
+<button onclick="createQR()">Create QR</button>
+<button onclick="printQR()">Print QR</button>
+</div>
+
+<div class="box">
+<button onclick="saveData()">SAVE DATA</button>
+<button onclick="showData()">VIEW DATA</button>
+<button onclick="backup()">BACKUP FILE</button>
+<button onclick="shareWhatsApp()">WHATSAPP SHARE</button>
+</div>
+
+<div class="box">
+<h3>Search Customer</h3>
+<input id="search" placeholder="Search name / phone" oninput="showData()">
+<div id="output"></div>
+</div>
+
+<div class="box">
+<h3>QR Scanner</h3>
+<div id="reader"></div>
+<button onclick="scanQR()">OPEN CAMERA SCANNER</button>
+</div>
+
+<div class="box">
+<h3>Change App Colours</h3>
+<label>Background</label>
+<input type="color" onchange="changeColor('--bg',this.value)">
+<label>Text</label>
+<input type="color" onchange="changeColor('--txt',this.value)">
+<label>Button</label>
+<input type="color" onchange="changeColor('--gold',this.value)">
+</div>
+
+<script>
+let records=[];
+let meterImage="";
+let pcbImage="";
+
+try{
+records=JSON.parse(localStorage.getItem("meterRecords")||"[]");
+}catch(e){records=[];}
+
+function readPhoto(id,preview,callback){
+let f=document.getElementById(id).files[0];
+if(!f)return;
+let r=new FileReader();
+r.onload=()=>{
+callback(r.result);
+document.getElementById(preview).src=r.result;
+};
+r.readAsDataURL(f);
+}
+
+document.getElementById("meterphoto").onchange=()=>{
+readPhoto("meterphoto","meterpreview",v=>meterImage=v);
+};
+
+document.getElementById("pcbphoto").onchange=()=>{
+readPhoto("pcbphoto","pcbpreview",v=>pcbImage=v);
+};
+
+function getForm(){
+return {
+id:"MTR-"+Date.now(),
+name:name.value,
+phone:phone.value,
+address:address.value,
+vehicle:vehicle.value,
+brand:brand.value,
+serial:serial.value,
+details:details.value,
+pcb:pcb.value,
+ic:ic.value,
+components:components.value,
+notes:notes.value,
+meterImage,
+pcbImage
+};
+}
+
+function saveData(){
+let d=getForm();
+if(!d.name&&!d.phone&&!d.serial){
+alert("Enter customer or meter details");
+return;
+}
+let index=records.findIndex(x=>x.id===d.id);
+records.push(d);
+localStorage.setItem("meterRecords",JSON.stringify(records));
+alert("Data Saved Successfully");
+}
+
+function showData(){
+let q=document.getElementById("search").value.toLowerCase();
+let out=document.getElementById("output");
+out.innerHTML="";
+records.filter(x=>
+(x.name+" "+x.phone+" "+x.vehicle+" "+x.serial)
+.toLowerCase().includes(q)
+).forEach(x=>{
+let d=document.createElement("div");
+d.className="box";
+d.innerHTML="<b>"+safe(x.name)+"</b><br>"+
+"Phone: "+safe(x.phone)+"<br>"+
+"Vehicle: "+safe(x.vehicle)+"<br>"+
+"Serial: "+safe(x.serial)+"<br>"+
+"PCB: "+safe(x.pcb)+"<br>"+
+"<button onclick=\"loadRecord('"+x.id+"')\">OPEN</button>"+
+"<button onclick=\"deleteRecord('"+x.id+"')\">DELETE</button>";
+out.appendChild(d);
+});
+}
+
+function safe(s){
+return String(s||"").replace(/[&<>"']/g,c=>({
+"&":"&amp;","<":"&lt;",">":"&gt;",
+'"':"&quot;","'":"&#39;"
+}[c]));
+}
+
+function loadRecord(id){
+let x=records.find(r=>r.id===id);
+if(!x)return;
+name.value=x.name;
+phone.value=x.phone;
+address.value=x.address;
+vehicle.value=x.vehicle;
+brand.value=x.brand;
+serial.value=x.serial;
+details.value=x.details;
+pcb.value=x.pcb;
+ic.value=x.ic;
+components.value=x.components;
+notes.value=x.notes;
+meterImage=x.meterImage||"";
+pcbImage=x.pcbImage||"";
+meterpreview.src=meterImage;
+pcbpreview.src=pcbImage;
+}
+
+function deleteRecord(id){
+if(confirm("Delete record?")){
+records=records.filter(x=>x.id!==id);
+localStorage.setItem("meterRecords",JSON.stringify(records));
+showData();
+}
+}
+
+function createQR(){
+let id=records.length?records[records.length-1].id:"METER-ID";
+qrcode.innerHTML="";
+new QRCode(qrcode,{text:id,width:180,height:180});
+}
+
+function printQR(){
+if(!qrcode.innerHTML)createQR();
+let w=window.open("");
+if(!w){alert("Allow popups");return;}
+w.document.write(qrcode.innerHTML);
+w.document.close();
+w.print();
+}
+
+function backup(){
+let b=new Blob([JSON.stringify(records)],{type:"application/json"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(b);
+a.download="Meter_Backup.json";
+a.click();
+}
+
+function shareWhatsApp(){
+let d=getForm();
+let t="METER DETAILS\n"+
+"Customer: "+d.name+"\n"+
+"Phone: "+d.phone+"\n"+
+"Vehicle: "+d.vehicle+"\n"+
+"Serial: "+d.serial+"\n"+
+"PCB: "+d.pcb+"\n"+
+"IC: "+d.ic+"\n"+
+"Notes: "+d.notes;
+window.open("https://wa.me/?text="+encodeURIComponent(t));
+}
+
+let scanner;
+async function scanQR(){
+try{
+if(!scanner)scanner=new Html5Qrcode("reader");
+await scanner.start(
+{facingMode:"environment"},
+{fps:10,qrbox:220},
+text=>{
+alert("QR Code: "+text);
+scanner.stop();
+});
+}catch(e){
+alert("Camera permission allow cheyyuka. HTTPS website use cheyyuka.");
+}
+}
+
+function changeColor(v,c){
+document.documentElement.style.setProperty(v,c);
+}
+</script>
+
+</body>
+</html>
+
